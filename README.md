@@ -1,1 +1,1 @@
-#Pizzeria - temat nr 9#link: https://github.com/pSus365/Pizzeria.git
+--Pizzeria - temat nr 9--LINK: https://github.com/pSus365/Pizzeria.gitDESCRIPTION: A simulation program for managing a pizzeria, including customer group seating logistics, order handling,and emergency evacuation procedures, ensuring operational efficiency and customer satisfaction.
