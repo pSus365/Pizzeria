@@ -20,6 +20,8 @@ int liczba_miejsc(int a1, int a2, int a3, int a4){ // HACK nie ma to sensu na tÄ
 }
 
 int main(int argc, char * argv[] ){
+    
+    
     printf("Kasjer zaczyna prace! (kasjer) \n");
 
     int a1 = atoi(argv[1]);
@@ -31,6 +33,44 @@ int main(int argc, char * argv[] ){
 
     int max_klient = liczba_miejsc(a1, a2, a3, a4);
 
+    key_t request_key; 
+    if((request_key = ftok(".", "REQ_KEY")) == -1){
+        perror("ERROR przy generowaniu klucza REQUEST_KEY [kasjer] \n");
+        exit(8);
+    }
+
+    key_t response_key;
+    if((request_key = ftok(".", "RES_KEY")) == -1){
+        perror("ERROR przy generowaniu klucza RESPONSE_KEY [kasjer] \n");
+        exit(9);
+    }
+
+    int requestQ = msgget((key_t)request_key, IPC_CREAT | 0666);  // kolejka do odbierania zamowienia od klientÃ³w
+    if(requestQ == -1) {
+        perror("Blad tworzenia requestQ");
+        return 1;
+    }
+
+    int responseQ = msgget((key_t)response_key, IPC_CREAT | 0666); // kolejka do podliczenia ceny dla klientow
+    if(responseQ == -1) {
+        perror("Blad tworzenia responseQ");
+        
+        msgctl(requestQ, IPC_RMID, NULL); // czyszczenie requestQ
+        return 1;
+    }
+
+
+
+    //Usuwam kolejki
+    if(msgctl(requestQ, IPC_RMID, NULL) == -1) {
+        perror("[main] Blad usuwania requestQ");
+    }
+    if(msgctl(responseQ, IPC_RMID, NULL) == -1) {
+        perror("[main] Blad usuwania responseQ");
+    }
+
+    printf("Koniec pracy! [Kasjer] \n");
+    return 0;
 
 
     return 0;

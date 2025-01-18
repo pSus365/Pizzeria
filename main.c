@@ -12,6 +12,8 @@
 #include <fcntl.h>
 #include <errno.h>
 
+#define MAX_ACTIVE_CLIENTS
+
 //argumenty wywołania programu - liczba stolików
 int arg_check(int argc, char * argv[]){
     if(argc != 5){
@@ -58,6 +60,7 @@ int liczba_miejsc(char * argv[]){
 
 int main(int argc, char* argv[])
 {
+    srand(time(NULL));
     int liczba_stolikow = arg_check(argc, argv);
     int max_klient = liczba_miejsc(argv);
     int main_id = getpid();
@@ -71,6 +74,8 @@ int main(int argc, char* argv[])
         case 0:
             execl("./kasjer", "kasjer",argv[1], argv[2], argv[3], argv[4], NULL);
     } 
+
+    sleep(2);
 
     // tworze stazaka
     pid_t strazak_id = fork();  //TODO przyjmowanie pidu kasjera maina i liczba stolików do oproznienia 
@@ -103,8 +108,62 @@ int main(int argc, char* argv[])
     printf("PID strazaka [main prog]: %d \n", strazak_id);
 
 
-    for(int i=0; i<1; i++){ // FIXME dwa procesy poki co
+
+    //TODO generowanie grup klientow 
+    //TODO działanie w pętli generowania grup klientow przez okreslony czas działania programu (interwałowo chce generowac grupy)
+
+
+    // TODO generowanie czasu pracy pizzerii
+    // TODO maksymalna liczba klientow
+    // TODO co ile generuje grupe klientow
+
+
+    //czas pracy pizzerii
+    int czas_dzialania_pizzerii = rand() % 61 + 30; // czas w zakresie od 30 do 90 sekund
+    time_t czas_aktualny = time(NULL);
+
+    while((time(NULL) - czas_aktualny) < czas_dzialania_pizzerii){
+        
+        char str_grupa_klientow[20];
+        int lo = rand() % 3 + 1; // generuje liczbe osob w grupie
+        sprintf(str_grupa_klientow, "%d", lo);
+        
+        //FIXME odebranie przez klienta grupy do utworzenia wątkow
+    
+
+        pid_t klient_pr_id = fork();
+        //FIXME generuj tylko jezeli jest mniej klientow niz max mozliwych
+        switch(klient_pr_id){
+            case -1:
+                perror("ERROR przy wywolaniu procesu klienta! (main prog -> execl) \n");
+                exit(9);
+            case 0:{
+                execl("./klient", "klient", str_grupa_klientow, (char *)NULL); //FIXME group size ma byc a nie liczba grup!!!!!!!
+                perror("ERROR przy wywolaniu procesu klienta! [main prog]\n");
+                exit(10);
+            }
+            default:
+                break;
+        }
+         sleep(3);
+    }
+
+    printf("Koniec czasu pizzerii! [main prog]\n");
+
+
+    //TODO Wysylamy komunikat mtype=99 do kasjera, by się zamknął
+    //TODO Czekamy na zakończenie procesu kasjera (wait)
+
+
+
+     for(int i=0; i<2; i++){ // FIXME dwa procesy poki co
         wait(NULL); 
     }
+   
+
+
+
+
+
     
 }
