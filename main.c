@@ -61,6 +61,8 @@ int liczba_miejsc(char * argv[]){
 int main(int argc, char* argv[])
 {
     srand(time(NULL));
+    //for(int x= 0; x < 1000; x++) {printf("x: %d ", rand());}
+    
     int liczba_stolikow = arg_check(argc, argv);
     int max_klient = liczba_miejsc(argv);
     int main_id = getpid();
@@ -124,9 +126,12 @@ int main(int argc, char* argv[])
 
     while((time(NULL) - czas_aktualny) < czas_dzialania_pizzerii){
         
-        char str_grupa_klientow[20];
-        int lo = rand() % 3 + 1; // generuje liczbe osob w grupie
-        sprintf(str_grupa_klientow, "%d", lo);
+        char str_liczba_osob[12];
+        int liczba_osob = rand() % 4 + 1; // generuje liczbe osob w grupie
+        
+        sprintf(str_liczba_osob, "%d", liczba_osob);
+        //int test_pid = getpid();
+        //printf("LICZBA OSOB: %d, PID: %d \n", liczba_osob, test_pid);
         
         //FIXME odebranie przez klienta grupy do utworzenia wątkow
     
@@ -138,7 +143,7 @@ int main(int argc, char* argv[])
                 perror("ERROR przy wywolaniu procesu klienta! (main prog -> execl) \n");
                 exit(9);
             case 0:{
-                execl("./klient", "klient", str_grupa_klientow, (char *)NULL); //FIXME group size ma byc a nie liczba grup!!!!!!!
+                execl("./klient", "klient", str_liczba_osob, (char *)NULL); //FIXME group size ma byc a nie liczba grup!!!!!!!
                 perror("ERROR przy wywolaniu procesu klienta! [main prog]\n");
                 exit(10);
             }
