@@ -1,3 +1,4 @@
+// main.c
 #include <stdio.h>
 #include <stdlib.h>
 #include <time.h>
@@ -12,9 +13,9 @@
 #include <fcntl.h>
 #include <errno.h>
 
-#define MAX_ACTIVE_CLIENTS
+#define MAX_ACTIVE_CLIENTS 100  // Definicja z wartością lub usuń jeśli nie jest potrzebna
 
-//argumenty wywołania programu - liczba stolików
+// Funkcja do sprawdzania argumentów wywołania programu - liczba stolików
 int arg_check(int argc, char * argv[]){
     if(argc != 5){
         fprintf(stderr, "Podano nieodpowiednia liczbe argumentow! [argc != 5] \n");
@@ -40,11 +41,12 @@ int arg_check(int argc, char * argv[]){
         fprintf(stderr, "W restauracji musi byc co najmniej jeden stolik! \n");
         exit(5);
     }
-    printf("Poprwana ilosc stolikow! \n");
+    printf("Poprawna ilosc stolikow! \n");
 
     return(liczba_stolikow); 
 }
 
+// Funkcja do obliczania liczby miejsc w restauracji
 int liczba_miejsc(char * argv[]){ 
 
     int a1 = atoi(argv[1]);
@@ -57,7 +59,6 @@ int liczba_miejsc(char * argv[]){
     return(liczba_miejsc);
 }
 
-
 int main(int argc, char* argv[])
 {
     srand(time(NULL));
@@ -67,20 +68,25 @@ int main(int argc, char* argv[])
     int max_klient = liczba_miejsc(argv);
     int main_id = getpid();
     
-    // tworzę kasjera
+    // Tworzenie procesu kasjera
     pid_t kasjer_id = fork();
     switch(kasjer_id){
         case -1:
             perror("ERROR przy tworzeniu kasjera! (main)");
             exit(1);
         case 0:
-            execl("./kasjer", "kasjer",argv[1], argv[2], argv[3], argv[4], NULL);
+            // Przekazujemy dodatkowy argument: czas_dzialania_pizzerii
+            // Ten argument będzie dodany później
+            // Dla teraz, przekazujemy 0 jako placeholder
+            execl("./kasjer", "kasjer", argv[1], argv[2], argv[3], argv[4], NULL);
+            perror("ERROR execl [kasjer]");
+            exit(6);
     } 
 
     sleep(2);
 
-    // tworze stazaka
-    pid_t strazak_id = fork();  //TODO przyjmowanie pidu kasjera maina i liczba stolików do oproznienia 
+    // Tworzenie procesu strażaka
+    pid_t strazak_id = fork();  //TODO przyjmowanie pidu kasjera maina i liczba stolikow do opróżnienia 
     switch(strazak_id){
         case -1:
             perror("ERROR przy tworzeniu strazaka!");
@@ -111,19 +117,47 @@ int main(int argc, char* argv[])
 
 
 
-    //TODO generowanie grup klientow 
-    //TODO działanie w pętli generowania grup klientow przez okreslony czas działania programu (interwałowo chce generowac grupy)
-
-
-    // TODO generowanie czasu pracy pizzerii
-    // TODO maksymalna liczba klientow
-    // TODO co ile generuje grupe klientow
-
-
-    //czas pracy pizzerii
+    // Generowanie czasu działania pizzerii
     int czas_dzialania_pizzerii = rand() % 61 + 30; // czas w zakresie od 30 do 90 sekund
     time_t czas_aktualny = time(NULL);
+    printf("Czas dzialania pizzerii: %d sekund\n", czas_dzialania_pizzerii);
 
+    // Tworzenie nowego procesu kasjera z przekazanym czasem działania
+    pid_t nowy_kasjer_id = fork();
+    if(nowy_kasjer_id == -1){
+        perror("ERROR przy tworzeniu nowego kasjera! (main)");
+        exit(8);
+    }
+    if(nowy_kasjer_id == 0){
+        // Przekazanie czasu działania pizzerii jako dodatkowego argumentu
+        char str_czas_dzialania_pizzerii[12];
+        sprintf(str_czas_dzialania_pizzerii, "%d", czas_dzialania_pizzerii);
+
+        execl("./kasjer", "kasjer", argv[1], argv[2], argv[3], argv[4], str_czas_dzialania_pizzerii, NULL);
+        perror("ERROR execl [nowy kasjer]");
+        exit(6);
+    }
+
+    // Tworzenie dodatkowego kasjera (jeśli to potrzebne)
+    // Jeśli chcesz mieć tylko jednego kasjera, usuń ten blok
+    /*
+    pid_t drugi_kasjer_id = fork();
+    if(drugi_kasjer_id == -1){
+        perror("ERROR przy tworzeniu drugiego kasjera! (main)");
+        exit(8);
+    }
+    if(drugi_kasjer_id == 0){
+        // Przekazanie czasu działania pizzerii jako dodatkowego argumentu
+        char str_czas_dzialania_pizzerii[12];
+        sprintf(str_czas_dzialania_pizzerii, "%d", czas_dzialania_pizzerii);
+
+        execl("./kasjer", "kasjer", argv[1], argv[2], argv[3], argv[4], str_czas_dzialania_pizzerii, NULL);
+        perror("ERROR execl [drugi kasjer]");
+        exit(6);
+    }
+    */
+
+    // Generowanie grup klientów w pętli
     while((time(NULL) - czas_aktualny) < czas_dzialania_pizzerii){
         
         char str_liczba_osob[12];
@@ -134,8 +168,7 @@ int main(int argc, char* argv[])
         //printf("LICZBA OSOB: %d, PID: %d \n", liczba_osob, test_pid);
         
         //FIXME odebranie przez klienta grupy do utworzenia wątkow
-    
-
+        
         pid_t klient_pr_id = fork();
         //FIXME generuj tylko jezeli jest mniej klientow niz max mozliwych
         switch(klient_pr_id){
@@ -155,20 +188,10 @@ int main(int argc, char* argv[])
 
     printf("Koniec czasu pizzerii! [main prog]\n");
 
+    // Czekanie na zakończenie wszystkich procesów potomnych
+    while(wait(NULL) > 0);
 
-    //TODO Wysylamy komunikat mtype=99 do kasjera, by się zamknął
-    //TODO Czekamy na zakończenie procesu kasjera (wait)
+    printf("Wszystkie procesy potomne zostaly zakonczone. [main prog]\n");
 
-
-
-     for(int i=0; i<2; i++){ // FIXME dwa procesy poki co
-        wait(NULL); 
-    }
-   
-
-
-
-
-
-    
+    return 0;
 }
