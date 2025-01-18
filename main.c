@@ -137,24 +137,6 @@ int main(int argc, char* argv[])
         exit(6);
     }
 
-    // Tworzenie dodatkowego kasjera (jeśli to potrzebne)
-    // Jeśli chcesz mieć tylko jednego kasjera, usuń ten blok
-    /*
-    pid_t drugi_kasjer_id = fork();
-    if(drugi_kasjer_id == -1){
-        perror("ERROR przy tworzeniu drugiego kasjera! (main)");
-        exit(8);
-    }
-    if(drugi_kasjer_id == 0){
-        // Przekazanie czasu działania pizzerii jako dodatkowego argumentu
-        char str_czas_dzialania_pizzerii[12];
-        sprintf(str_czas_dzialania_pizzerii, "%d", czas_dzialania_pizzerii);
-
-        execl("./kasjer", "kasjer", argv[1], argv[2], argv[3], argv[4], str_czas_dzialania_pizzerii, NULL);
-        perror("ERROR execl [drugi kasjer]");
-        exit(6);
-    }
-    */
 
     // Generowanie grup klientów w pętli
     while((time(NULL) - czas_aktualny) < czas_dzialania_pizzerii){
