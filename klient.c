@@ -1,4 +1,3 @@
-// klient.c
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -6,6 +5,7 @@
 #include <sys/types.h>
 #include <sys/ipc.h>
 #include <sys/msg.h>
+#include <sys/sem.h>
 #include <pthread.h>
 #include <errno.h>
 #include <time.h>
@@ -79,6 +79,18 @@ void* person_thread(void* arg) {
     pthread_exit(NULL);
 }
 
+// Funkcja rezerwująca miejsce w semaforze
+void reserve_semaphore(int semid) {
+    struct sembuf sb;
+    sb.sem_num = 0;
+    sb.sem_op = -1; // Próba zmniejszenia semafora
+    sb.sem_flg = 0;
+    if (semop(semid, &sb, 1) == -1) {
+        perror(GREEN "semop reserve" RESET);
+        exit(EXIT_FAILURE);
+    }
+}
+
 int main(int argc, char* argv[]) {
     if (argc != 2) {
         fprintf(stderr, GREEN "Usage: %s <group_size>\n" RESET, argv[0]);
@@ -117,6 +129,25 @@ int main(int argc, char* argv[]) {
         printf(GREEN "Upewnij się, że kasjer jest uruchomiony przed klientem.\n" RESET);
         exit(EXIT_FAILURE);
     }
+
+    // Klucz semafora
+    key_t sem_key = ftok(".", 'S');
+    if (sem_key < 0) {
+        perror(GREEN "ERROR ftok [klient]" RESET);
+        exit(EXIT_FAILURE);
+    }
+
+    // Uzyskanie dostępu do semafora
+    int semid = semget(sem_key, 1, 0);
+    if (semid < 0) {
+        perror(GREEN "ERROR semget [klient]: No such semaphore" RESET);
+        printf(GREEN "Pizzeria może być zamknięta lub semafor nie został zainicjalizowany.\n" RESET);
+        exit(EXIT_FAILURE);
+    }
+
+    // Rezerwacja miejsca w semaforze przed wejściem do pizzerii
+    reserve_semaphore(semid);
+    printf(GREEN "Zarezerwowano miejsce w pizzerii.\n" RESET);
 
     // Wysłanie żądania stolika
     char request_msg[64];
@@ -158,6 +189,20 @@ int main(int argc, char* argv[]) {
         char order_response[256];
         receive_message(msgq1_id, group.pid, order_response, sizeof(order_response));
         printf(GREEN "Odebrano potwierdzenie zamówienia: %s\n" RESET, order_response);
+
+        // **Nowa funkcjonalność: Symulacja jedzenia pizzy**
+        // Czas jedzenia pizzy (symulacja) - losowy czas między 5 a 15 sekundami
+        int eating_time = rand() % 11 + 5;
+        printf(GREEN "Grupa %d osób zaczyna jeść pizzę. Czas jedzenia: %d sekund.\n" RESET, group_size, eating_time);
+        sleep(eating_time);
+        printf(GREEN "Grupa %d osób zakończyła jedzenie pizzy.\n" RESET, group_size);
+
+        // Wysłanie komunikatu o zakończeniu jedzenia
+        char finish_msg[64];
+        snprintf(finish_msg, sizeof(finish_msg), "FINISH:%d:%d", group_size, group.pid);
+        send_message(msgq1_id, 1, finish_msg);
+        printf(GREEN "Wysłano informację o zakończeniu jedzenia do kasjera.\n" RESET);
+
     } else {
         printf(GREEN "Nie ma dostępnych stolików dla grupy %d osób.\n" RESET, group_size);
     }

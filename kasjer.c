@@ -1,4 +1,3 @@
-// kasjer.c
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -6,6 +5,7 @@
 #include <sys/types.h>
 #include <sys/ipc.h>
 #include <sys/msg.h>
+#include <sys/sem.h>
 #include <pthread.h>
 #include <errno.h>
 #include <signal.h>
@@ -123,6 +123,40 @@ void generate_report(struct kasjer_info* kasjer) {
     fclose(report_file);
 }
 
+// Funkcja zwalniająca miejsce w semaforze
+void release_semaphore(int semid) {
+    struct sembuf sb;
+    sb.sem_num = 0;
+    sb.sem_op = 1; // Zwiększenie wartości semafora
+    sb.sem_flg = 0;
+    if (semop(semid, &sb, 1) == -1) {
+        perror(BLUE "semop release" RESET);
+    }
+}
+
+// Funkcja inicjalizująca semafor
+int init_semaphore(int initial_value) {
+    key_t sem_key = ftok(".", 'S');
+    if (sem_key < 0) {
+        perror(BLUE "ftok [kasjer]" RESET);
+        exit(EXIT_FAILURE);
+    }
+
+    int semid = semget(sem_key, 1, IPC_CREAT | IPC_EXCL | 0666);
+    if (semid < 0) {
+        perror(BLUE "semget [kasjer]" RESET);
+        exit(EXIT_FAILURE);
+    }
+
+    if (semctl(semid, 0, SETVAL, initial_value) == -1) {
+        perror(BLUE "semctl SETVAL [kasjer]" RESET);
+        semctl(semid, 0, IPC_RMID);
+        exit(EXIT_FAILURE);
+    }
+
+    return semid;
+}
+
 // Funkcja obsługująca komunikaty
 void* handle_messages(void* arg) {
     struct kasjer_info* kasjer = (struct kasjer_info*)arg;
@@ -138,6 +172,20 @@ void* handle_messages(void* arg) {
     int msgq1_id = msgget(msgq1_key, 0600);
     if (msgq1_id < 0) {
         perror(BLUE "ERROR msgget [kasjer]" RESET);
+        pthread_exit(NULL);
+    }
+
+    // Klucz semafora
+    key_t sem_key = ftok(".", 'S');
+    if (sem_key < 0) {
+        perror(BLUE "ERROR ftok [kasjer]" RESET);
+        pthread_exit(NULL);
+    }
+
+    // Uzyskanie dostępu do semafora
+    int semid = semget(sem_key, 1, 0);
+    if (semid < 0) {
+        perror(BLUE "ERROR semget [kasjer]" RESET);
         pthread_exit(NULL);
     }
 
@@ -224,12 +272,28 @@ void* handle_messages(void* arg) {
             send_message(msgq1_id, client_pid, order_reply);
             printf(BLUE "Wysłano potwierdzenie zamówienia do PID %d: %s\n" RESET, client_pid, order_reply);
 
-            // Zwalnianie stolika po zakończeniu zamówienia
-            pthread_mutex_lock(&kasjer->lock);
-            if (group_size >= 1 && group_size <= 4) {
+            // **Nie zwalniamy stolika tutaj. Zostanie zwolniony po komunikacie FINISH.**
+
+        } else if (strncmp(buffer.mtext, "FINISH:", 7) == 0) {
+            // Obsługa komunikatu o zakończeniu jedzenia
+            int group_size;
+            pid_t client_pid;
+            sscanf(buffer.mtext, "FINISH:%d:%d", &group_size, &client_pid);
+
+            printf(BLUE "Otrzymano informację o zakończeniu jedzenia od PID %d dla grupy %d.\n" RESET, client_pid, group_size);
+
+            if (group_size >=1 && group_size <=4) {
+                pthread_mutex_lock(&kasjer->lock);
                 kasjer->tables[group_size - 1]++;
+                kasjer->tables_assigned[group_size - 1]--;
+                pthread_mutex_unlock(&kasjer->lock);
+                printf(BLUE "Zwolniono stolik dla grupy %d osób.\n" RESET, group_size);
+            } else {
+                printf(BLUE "Nieprawidłowy rozmiar grupy: %d.\n" RESET, group_size);
             }
-            pthread_mutex_unlock(&kasjer->lock);
+
+            // Zwalnianie semafora
+            release_semaphore(semid);
         } else {
             printf(BLUE "Otrzymano nieznany komunikat: %s\n" RESET, buffer.mtext);
         }
@@ -304,6 +368,13 @@ int main(int argc, char* argv[])
         exit(EXIT_FAILURE);
     }
 
+    // Obliczenie liczby miejsc w pizzerii
+    int total_seats = a1 * 1 + a2 * 2 + a3 * 3 + a4 * 4;
+
+    // Inicjalizacja semafora z liczbą miejsc
+    int semid = init_semaphore(total_seats);
+    printf(BLUE "Zainicjalizowano semafor z wartością: %d\n" RESET, total_seats);
+
     // Ustalony czas działania kasjera (otrzymany jako argument)
     int total_duration = czas_dzialania_pizzerii; // w sekundach
     int time_before_stop_accepting = 5; // w sekundach
@@ -335,6 +406,11 @@ int main(int argc, char* argv[])
     if (msgctl(msgq1_id, IPC_RMID, 0) < 0) {
         perror(BLUE "msgctl" RESET);
         exit(EXIT_FAILURE);
+    }
+
+    // Usunięcie semafora
+    if (semctl(semid, 0, IPC_RMID) == -1) {
+        perror(BLUE "semctl IPC_RMID [kasjer]" RESET);
     }
 
     // Generowanie raportu
