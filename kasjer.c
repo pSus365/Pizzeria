@@ -1,3 +1,4 @@
+// kasjer.c
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -9,6 +10,10 @@
 #include <errno.h>
 #include <signal.h>
 #include <time.h>
+
+// Definicje kolorów ANSI
+#define RESET   "\033[0m"
+#define BLUE    "\033[34m"
 
 // Struktura komunikatu
 struct msgbuf {
@@ -48,7 +53,7 @@ volatile sig_atomic_t global_stop = 0;
 // Funkcja obsługi sygnału SIGINT
 void handle_signal(int sig) {
     if (sig == SIGINT) {
-        printf("\nOdebrano sygnał SIGINT (Ctrl+C). Kończenie pracy kasjera...\n");
+        printf(BLUE "\nOdebrano sygnał SIGINT (Ctrl+C). Kończenie pracy kasjera...\n" RESET);
         global_stop = 1;
     }
 }
@@ -84,26 +89,26 @@ void send_message(int mqid, long type, const char* message) {
     buffer.mtext[sizeof(buffer.mtext) - 1] = '\0';
 
     if (msgsnd(mqid, &buffer, strlen(buffer.mtext) + 1, 0) < 0) {
-        perror("msgsnd");
+        perror(BLUE "msgsnd" RESET);
         // Nie kończ programu, aby kontynuować obsługę innych klientów
     }
 }
 
 // Funkcja generująca raport
 void generate_report(struct kasjer_info* kasjer) {
-    printf("\n===== Raport Działania Pizzerii =====\n");
-    printf("Całkowity utarg: %.2f PLN\n", kasjer->revenue);
-    printf("Łączna liczba zamówień: %d\n", kasjer->total_orders);
-    printf("Przydzielone stoliki:\n");
+    printf(BLUE "\n===== Raport Działania Pizzerii =====\n" RESET);
+    printf(BLUE "Całkowity utarg: %.2f PLN\n" RESET, kasjer->revenue);
+    printf(BLUE "Łączna liczba zamówień: %d\n" RESET, kasjer->total_orders);
+    printf(BLUE "Przydzielone stoliki:\n" RESET);
     for (int i = 0; i < 4; i++) {
-        printf("  %d-osobowe: %d\n", i + 1, kasjer->tables_assigned[i]);
+        printf(BLUE "  %d-osobowe: %d\n" RESET, i + 1, kasjer->tables_assigned[i]);
     }
-    printf("=====================================\n");
+    printf(BLUE "=====================================\n" RESET);
 
     // Zapisanie raportu do pliku
     FILE* report_file = fopen("report.txt", "a");
     if (report_file == NULL) {
-        perror("fopen");
+        perror(BLUE "fopen" RESET);
         return;
     }
 
@@ -125,14 +130,14 @@ void* handle_messages(void* arg) {
     // Klucz kolejki komunikatów
     key_t msgq1_key = ftok(".", 'M');
     if (msgq1_key < 0) {
-        perror("ERROR ftok [kasjer]");
+        perror(BLUE "ERROR ftok [kasjer]" RESET);
         pthread_exit(NULL);
     }
 
     // Uzyskanie dostępu do kolejki komunikatów
     int msgq1_id = msgget(msgq1_key, 0600);
     if (msgq1_id < 0) {
-        perror("ERROR msgget [kasjer]");
+        perror(BLUE "ERROR msgget [kasjer]" RESET);
         pthread_exit(NULL);
     }
 
@@ -147,7 +152,7 @@ void* handle_messages(void* arg) {
             } else if (errno == EINTR) {
                 continue; // Przerwanie przez sygnał
             } else {
-                perror("msgrcv");
+                perror(BLUE "msgrcv" RESET);
                 continue;
             }
         }
@@ -159,7 +164,7 @@ void* handle_messages(void* arg) {
             pid_t client_pid;
             sscanf(buffer.mtext, "REQUEST:%d:%d", &group_size, &client_pid);
 
-            printf("Otrzymano żądanie stolika dla grupy %d osób od PID %d.\n", group_size, client_pid);
+            printf(BLUE "Otrzymano żądanie stolika dla grupy %d osób od PID %d.\n" RESET, group_size, client_pid);
 
             char reply[256];
             if (group_size < 1 || group_size > 4) {
@@ -179,7 +184,7 @@ void* handle_messages(void* arg) {
 
             // Wysłanie odpowiedzi do klienta
             send_message(msgq1_id, client_pid, reply);
-            printf("Wysłano odpowiedź do PID %d: %s\n", client_pid, reply);
+            printf(BLUE "Wysłano odpowiedź do PID %d: %s\n" RESET, client_pid, reply);
 
         } else if (strncmp(buffer.mtext, "ORDER:", 6) == 0) {
             // Obsługa zamówienia
@@ -188,7 +193,7 @@ void* handle_messages(void* arg) {
             char items_str[256];
             sscanf(buffer.mtext, "ORDER:%d:%d:%255[^\n]", &group_size, &client_pid, items_str);
 
-            printf("Otrzymano zamówienie od PID %d dla grupy %d: %s\n", client_pid, group_size, items_str);
+            printf(BLUE "Otrzymano zamówienie od PID %d dla grupy %d: %s\n" RESET, client_pid, group_size, items_str);
 
             // Parsowanie zamówienia
             char* token;
@@ -217,7 +222,7 @@ void* handle_messages(void* arg) {
             char order_reply[256];
             snprintf(order_reply, sizeof(order_reply), "ORDER CONFIRMED: Your order totaling %.2f PLN is ready.", total);
             send_message(msgq1_id, client_pid, order_reply);
-            printf("Wysłano potwierdzenie zamówienia do PID %d: %s\n", client_pid, order_reply);
+            printf(BLUE "Wysłano potwierdzenie zamówienia do PID %d: %s\n" RESET, client_pid, order_reply);
 
             // Zwalnianie stolika po zakończeniu zamówienia
             pthread_mutex_lock(&kasjer->lock);
@@ -226,7 +231,7 @@ void* handle_messages(void* arg) {
             }
             pthread_mutex_unlock(&kasjer->lock);
         } else {
-            printf("Otrzymano nieznany komunikat: %s\n", buffer.mtext);
+            printf(BLUE "Otrzymano nieznany komunikat: %s\n" RESET, buffer.mtext);
         }
     }
 
@@ -236,7 +241,7 @@ void* handle_messages(void* arg) {
 int main(int argc, char* argv[])
 {
     if (argc != 6) {  // Teraz oczekujemy 5 argumentów: 4 stoliki + czas_dzialania_pizzerii
-        fprintf(stderr, "Usage: %s <tables_1> <tables_2> <tables_3> <tables_4> <czas_dzialania_pizzerii>\n", argv[0]);
+        fprintf(stderr, BLUE "Usage: %s <tables_1> <tables_2> <tables_3> <tables_4> <czas_dzialania_pizzerii>\n" RESET, argv[0]);
         exit(EXIT_FAILURE);
     }
 
@@ -247,36 +252,36 @@ int main(int argc, char* argv[])
     int czas_dzialania_pizzerii = atoi(argv[5]);
 
     if(a1 < 0 || a2 < 0 || a3 < 0 || a4 < 0 || czas_dzialania_pizzerii <= 0){
-        fprintf(stderr, "Niepoprawne argumenty! Liczba stolików musi być >=0, a czas_dzialania_pizzerii >0.\n");
+        fprintf(stderr, BLUE "Niepoprawne argumenty! Liczba stolików musi być >=0, a czas_dzialania_pizzerii >0.\n" RESET);
         exit(EXIT_FAILURE);
     }
 
-    printf("Kasjer zaczyna pracę! (kasjer)\n");
+    printf(BLUE "Kasjer zaczyna pracę! (kasjer)\n" RESET);
 
     struct kasjer_info kasjer;
     init_kasjer(&kasjer, a1, a2, a3, a4);
 
-    printf("Witam, mam %d stolików 1-osobowych, %d stolików 2-osobowych, %d stolików 3-osobowych, %d stolików 4-osobowych.\n",
+    printf(BLUE "Witam, mam %d stolików 1-osobowych, %d stolików 2-osobowych, %d stolików 3-osobowych, %d stolików 4-osobowych.\n" RESET,
            kasjer.tables[0], kasjer.tables[1], kasjer.tables[2], kasjer.tables[3]);
 
     // Klucz kolejki komunikatów
     key_t msgq1_key = ftok(".", 'M');
     if (msgq1_key < 0) {
-        perror("ERROR ftok [kasjer]");
+        perror(BLUE "ERROR ftok [kasjer]" RESET);
         exit(EXIT_FAILURE);
     }
 
     // Tworzenie kolejki komunikatów
     int msgq1_id = msgget(msgq1_key, 0600 | IPC_CREAT | IPC_EXCL);
     if (msgq1_id < 0) {
-        perror("ERROR msgget [kasjer]");
+        perror(BLUE "ERROR msgget [kasjer]" RESET);
         exit(EXIT_FAILURE);
     }
 
     // Wysłanie wiadomości powitalnej
     char welcome_msg[] = "Zapraszam do zamawiania!";
     send_message(msgq1_id, 1, welcome_msg);
-    printf("Wysłano wiadomość powitalną.\n");
+    printf(BLUE "Wysłano wiadomość powitalną.\n" RESET);
 
     // Ustawienie obsługi sygnału SIGINT
     struct sigaction sa;
@@ -284,7 +289,7 @@ int main(int argc, char* argv[])
     sa.sa_flags = 0;
     sigemptyset(&sa.sa_mask);
     if (sigaction(SIGINT, &sa, NULL) == -1) {
-        perror("sigaction SIGINT");
+        perror(BLUE "sigaction SIGINT" RESET);
         // Usunięcie kolejki przed zakończeniem
         msgctl(msgq1_id, IPC_RMID, NULL);
         exit(EXIT_FAILURE);
@@ -293,7 +298,7 @@ int main(int argc, char* argv[])
     // Tworzenie wątku do obsługi komunikatów
     pthread_t handler_thread;
     if (pthread_create(&handler_thread, NULL, handle_messages, &kasjer) != 0) {
-        perror("pthread_create");
+        perror(BLUE "pthread_create" RESET);
         // Usunięcie kolejki przed zakończeniem
         msgctl(msgq1_id, IPC_RMID, NULL);
         exit(EXIT_FAILURE);
@@ -310,7 +315,7 @@ int main(int argc, char* argv[])
     pthread_mutex_lock(&kasjer.lock);
     kasjer.accept_new_orders = 0;
     pthread_mutex_unlock(&kasjer.lock);
-    printf("\n5 sekund przed zakończeniem pracy pizzerii. Kasjer przestaje akceptować nowe zamówienia.\n");
+    printf(BLUE "\n5 sekund przed zakończeniem pracy pizzerii. Kasjer przestaje akceptować nowe zamówienia.\n" RESET);
 
     // Oczekiwanie na ostatnie 5 sekund
     sleep(time_before_stop_accepting);
@@ -320,7 +325,7 @@ int main(int argc, char* argv[])
     kasjer.stop = 1;
     pthread_mutex_unlock(&kasjer.lock);
 
-    printf("\nZakonczono czas dzialania pizzerii. Kasjer przestaje pracowac.\n");
+    printf(BLUE "\nZakonczono czas dzialania pizzerii. Kasjer przestaje pracowac.\n" RESET);
 
     // Czyszczenie
     pthread_join(handler_thread, NULL);
@@ -328,13 +333,13 @@ int main(int argc, char* argv[])
 
     // Usunięcie kolejki komunikatów
     if (msgctl(msgq1_id, IPC_RMID, 0) < 0) {
-        perror("msgctl");
+        perror(BLUE "msgctl" RESET);
         exit(EXIT_FAILURE);
     }
 
     // Generowanie raportu
     generate_report(&kasjer);
 
-    printf("Kasjer zakończył działanie.\n");
+    printf(BLUE "Kasjer zakończył działanie.\n" RESET);
     return 0;
 }

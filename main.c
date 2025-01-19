@@ -14,10 +14,14 @@
 
 #define MAX_ACTIVE_CLIENTS 100  // Definicja z wartością lub usuń jeśli nie jest potrzebna
 
+// Definicje kolorów ANSI
+#define RESET   "\033[0m"
+#define CYAN    "\033[33m"
+
 // Funkcja do sprawdzania argumentów wywołania programu - liczba stolików
 int arg_check(int argc, char * argv[]){
     if(argc != 5){
-        fprintf(stderr, "Podano nieodpowiednia liczbe argumentow! [argc != 5] \n");
+        fprintf(stderr, CYAN "Podano nieodpowiednia liczbe argumentow! [argc != 5] \n" RESET);
         exit(3);
     }
 
@@ -30,17 +34,17 @@ int arg_check(int argc, char * argv[]){
 
     if(a1 < 0 || a2 < 0 || a3 < 0 || a4 < 0)
     {
-        fprintf(stderr, "Nie mozna podawac ujemnych liczb stolikow!\n");
+        fprintf(stderr, CYAN "Nie mozna podawac ujemnych liczb stolikow!\n" RESET);
         exit(4);
     }
 
     liczba_stolikow = a1 + a2 + a3 + a4;
 
     if(liczba_stolikow < 1){
-        fprintf(stderr, "W restauracji musi byc co najmniej jeden stolik! \n");
+        fprintf(stderr, CYAN "W restauracji musi byc co najmniej jeden stolik! \n" RESET);
         exit(5);
     }
-    printf("Poprawna ilosc stolikow! \n");
+    printf(CYAN "Poprawna ilosc stolikow! \n" RESET);
 
     return(liczba_stolikow); 
 }
@@ -110,16 +114,16 @@ int main(int argc, char* argv[])
             break;
     }
 
-    printf("PID programu glownego [main prog]: %d \n", main_id);
-    printf("PID kasjera [main prog]: %d \n", kasjer_id);
-    printf("PID strazaka [main prog]: %d \n", strazak_id);
+    printf(CYAN "PID programu glownego [main prog]: %d \n" RESET, main_id);
+    printf(CYAN "PID kasjera [main prog]: %d \n" RESET, kasjer_id);
+    printf(CYAN "PID strazaka [main prog]: %d \n" RESET, strazak_id);
 
 
 
     // Generowanie czasu działania pizzerii
     int czas_dzialania_pizzerii = rand() % 61 + 30; // czas w zakresie od 30 do 90 sekund
     time_t czas_aktualny = time(NULL);
-    printf("Czas dzialania pizzerii: %d sekund\n", czas_dzialania_pizzerii);
+    printf(CYAN "Czas dzialania pizzerii: %d sekund\n" RESET, czas_dzialania_pizzerii);
 
     // Tworzenie nowego procesu kasjera z przekazanym czasem działania
     pid_t nowy_kasjer_id = fork();
@@ -167,12 +171,12 @@ int main(int argc, char* argv[])
          sleep(3);
     }
 
-    printf("Koniec czasu pizzerii! [main prog]\n");
+    printf(CYAN "Koniec czasu pizzerii! [main prog]\n" RESET);
 
     // Czekanie na zakończenie wszystkich procesów potomnych
     while(wait(NULL) > 0);
 
-    printf("Wszystkie procesy potomne zostaly zakonczone. [main prog]\n");
+    printf(CYAN "Wszystkie procesy potomne zostaly zakonczone. [main prog]\n" RESET);
 
     return 0;
 }
