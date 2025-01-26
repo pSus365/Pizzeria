@@ -13,10 +13,54 @@
 #include <errno.h>
 
 #define MAX_ACTIVE_CLIENTS 100  // Definicja z wartością lub usuń jeśli nie jest potrzebna
+#define MAX_PROCESSES 100
 
 // Definicje kolorów ANSI
 #define RESET   "\033[0m"
 #define CYAN    "\033[33m"
+#define GREEN   "\033[32m"
+
+
+
+struct shared_memory {
+    pid_t process_ids[MAX_PROCESSES];
+    int count;
+};
+
+int create_shared_memory() {
+    
+    
+    key_t sh_key = ftok(".", 'L');
+    if (sh_key < 0) {
+        perror(GREEN "ERROR ftok [klient]" RESET);
+        exit(EXIT_FAILURE);
+    }
+
+    int shmid = shmget(sh_key, sizeof(struct shared_memory), IPC_CREAT | 0666);
+    if (shmid < 0) {
+        perror("shmget failed");
+        exit(1);
+    }
+    return shmid;
+}
+
+void initialize_shared_memory(int shmid) {
+    struct shared_memory *shm = (struct shared_memory *)shmat(shmid, NULL, 0);
+    if (shm == (void *)-1) {
+        perror("shmat failed");
+        exit(1);
+    }
+    shm->count = 0;  // Ustawienie początkowego licznika
+    shmdt(shm);      // Odłączenie segmentu
+}
+
+void cleanup_shared_memory(int shmid) {
+    if (shmctl(shmid, IPC_RMID, NULL) == -1) {
+        perror("shmctl IPC_RMID failed");
+    } else {
+        printf("Pamięć współdzielona usunięta.\n");
+    }
+}
 
 // Funkcja do sprawdzania argumentów wywołania programu - liczba stolików
 int arg_check(int argc, char * argv[]){
@@ -71,22 +115,33 @@ int main(int argc, char* argv[])
     int max_klient = liczba_miejsc(argv);
     int main_id = getpid();
     
-    // Tworzenie procesu kasjera
-    pid_t kasjer_id = fork();
-    switch(kasjer_id){
-        case -1:
-            perror("ERROR przy tworzeniu kasjera! (main)");
-            exit(1);
-        case 0:
-            // Przekazujemy dodatkowy argument: czas_dzialania_pizzerii
-            // Ten argument będzie dodany później
-            // Dla teraz, przekazujemy 0 jako placeholder
-            execl("./kasjer", "kasjer", argv[1], argv[2], argv[3], argv[4], NULL);
-            perror("ERROR execl [kasjer]");
-            exit(6);
-    } 
+    // Tworzenie i inicjalizacja pamięci współdzielonej
+    int shmid = create_shared_memory();
+    initialize_shared_memory(shmid); 
+    
+    // Generowanie czasu działania pizzerii
+    int czas_dzialania_pizzerii = rand() % 61 + 30; // czas w zakresie od 30 do 90 sekund
+    time_t czas_aktualny = time(NULL);
+    printf(CYAN "Czas dzialania pizzerii: %d sekund\n" RESET, czas_dzialania_pizzerii);
 
-    sleep(2);
+     // Tworzenie nowego procesu kasjera z przekazanym czasem działania
+   
+    pid_t kasjer_id = fork();
+   
+    
+    if(kasjer_id == -1){
+        perror("ERROR przy tworzeniu nowego kasjera! (main)");
+        exit(8);
+    }
+    if(kasjer_id == 0){
+        // Przekazanie czasu działania pizzerii jako dodatkowego argumentu
+        char str_czas_dzialania_pizzerii[12];
+        sprintf(str_czas_dzialania_pizzerii, "%d", czas_dzialania_pizzerii);
+
+        execl("./kasjer", "kasjer", argv[1], argv[2], argv[3], argv[4], str_czas_dzialania_pizzerii, NULL);
+        perror("ERROR execl [kasjer]");
+        exit(6);
+    }
 
     // Tworzenie procesu strażaka
     pid_t strazak_id = fork();  //TODO przyjmowanie pidu kasjera maina i liczba stolikow do opróżnienia 
@@ -119,64 +174,64 @@ int main(int argc, char* argv[])
     printf(CYAN "PID strazaka [main prog]: %d \n" RESET, strazak_id);
 
 
-
-    // Generowanie czasu działania pizzerii
-    int czas_dzialania_pizzerii = rand() % 61 + 30; // czas w zakresie od 30 do 90 sekund
-    time_t czas_aktualny = time(NULL);
-    printf(CYAN "Czas dzialania pizzerii: %d sekund\n" RESET, czas_dzialania_pizzerii);
-
-    // Tworzenie nowego procesu kasjera z przekazanym czasem działania
-    pid_t nowy_kasjer_id = fork();
-    if(nowy_kasjer_id == -1){
-        perror("ERROR przy tworzeniu nowego kasjera! (main)");
-        exit(8);
-    }
-    if(nowy_kasjer_id == 0){
-        // Przekazanie czasu działania pizzerii jako dodatkowego argumentu
-        char str_czas_dzialania_pizzerii[12];
-        sprintf(str_czas_dzialania_pizzerii, "%d", czas_dzialania_pizzerii);
-
-        execl("./kasjer", "kasjer", argv[1], argv[2], argv[3], argv[4], str_czas_dzialania_pizzerii, NULL);
-        perror("ERROR execl [nowy kasjer]");
-        exit(6);
-    }
-
-
-    // Generowanie grup klientów w pętli
-    while((time(NULL) - czas_aktualny) < czas_dzialania_pizzerii){
+    // // Generowanie grup klientów w pętli
+    // while((time(NULL) - czas_aktualny) < czas_dzialania_pizzerii){
         
-        char str_liczba_osob[12];
-        int liczba_osob = rand() % 4 + 1; // generuje liczbe osob w grupie
+    //     char str_liczba_osob[12];
+    //     int liczba_osob = rand() % 4 + 1; // generuje liczbe osob w grupie
         
-        sprintf(str_liczba_osob, "%d", liczba_osob);
-        //int test_pid = getpid();
-        //printf("LICZBA OSOB: %d, PID: %d \n", liczba_osob, test_pid);
+    //     sprintf(str_liczba_osob, "%d", liczba_osob);
+    //     //int test_pid = getpid();
+    //     //printf("LICZBA OSOB: %d, PID: %d \n", liczba_osob, test_pid);
         
-        //FIXME odebranie przez klienta grupy do utworzenia wątkow
-        
-        pid_t klient_pr_id = fork();
-        //FIXME generuj tylko jezeli jest mniej klientow niz max mozliwych
-        switch(klient_pr_id){
-            case -1:
-                perror("ERROR przy wywolaniu procesu klienta! (main prog -> execl) \n");
-                exit(9);
-            case 0:{
-                execl("./klient", "klient", str_liczba_osob, (char *)NULL); //FIXME group size ma byc a nie liczba grup!!!!!!!
-                perror("ERROR przy wywolaniu procesu klienta! [main prog]\n");
-                exit(10);
-            }
-            default:
-                break;
+    //     //FIXME odebranie przez klienta grupy do utworzenia wątkow
+    //     printf("--------------------------------");
+    //     pid_t klient_pr_id = 0;
+    //     printf("--------------------------------%d", klient_pr_id);
+    //     //FIXME generuj tylko jezeli jest mniej klientow niz max mozliwych
+    //     switch(klient_pr_id = fork()){
+    //         case -1:
+    //             perror("ERROR przy wywolaniu procesu klienta! (main prog -> execl) \n");
+    //             exit(9);
+    //         case 0:{
+    //             printf("--------------------------------%d", klient_pr_id);
+    //             execl("./klient", "klient", str_liczba_osob, (char *)NULL); //FIXME group size ma byc a nie liczba grup!!!!!!!
+    //             perror("ERROR przy wywolaniu procesu klienta! [main prog]\n");
+    //             exit(10);
+    //         }
+    //         default:
+    //             break;
+    //     }
+    //      sleep(3);
+    // }
+    char str_liczba_osob[12];
+    int liczba_osob = rand() % 4 + 1;
+    sprintf(str_liczba_osob, "%d", liczba_osob);
+
+    pid_t klient_pr_id = fork();
+
+    switch(klient_pr_id){
+        case -1:
+            perror("ERROR przy wywolaniu procesu klienta! (main prog -> execl) \n");
+            exit(9);
+         case 0:{
+            execl("./klient", "klient", str_liczba_osob, (char *)NULL); //FIXME group size ma byc a nie liczba grup!!!!!!!
+            perror("ERROR przy wywolaniu procesu klienta! [main prog]\n");
+            exit(10);
+         }
+        default:
+            break;
         }
-         sleep(3);
-    }
 
-    printf(CYAN "Koniec czasu pizzerii! [main prog]\n" RESET);
 
     // Czekanie na zakończenie wszystkich procesów potomnych
     while(wait(NULL) > 0);
 
     printf(CYAN "Wszystkie procesy potomne zostaly zakonczone. [main prog]\n" RESET);
+
+    printf(CYAN "Koniec czasu pizzerii! [main prog]\n" RESET);
+
+    cleanup_shared_memory(shmid);
 
     return 0;
 }

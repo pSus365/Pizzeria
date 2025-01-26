@@ -14,6 +14,16 @@
 #define RESET   "\033[0m"
 #define GREEN   "\033[32m"
 
+#define MAX_PROCESSES 100
+
+#define SHM_KEY 12345  // Klucz pamięci współdzielonej
+#define SEM_KEY 54321      // Klucz semafora
+
+struct shared_memory {
+    pid_t process_ids[MAX_PROCESSES];
+    int count;
+};
+
 // Struktura komunikatu
 struct msgbuf {
     long type;
@@ -32,6 +42,46 @@ struct client_group {
     char order[1024];
     pthread_mutex_t lock;
 };
+
+// Funkcja inicjalizująca semafor
+int init_semaphore(int key, int initial_value) {
+    int semid = semget(key, 1, IPC_CREAT | 0666); // Tworzymy semafor
+    if (semid == -1) {
+        perror("semget failed");
+        exit(1);
+    }
+
+    if (semctl(semid, 0, SETVAL, initial_value) == -1) { // Ustawiamy wartość początkową
+        perror("semctl SETVAL failed");
+        exit(1);
+    }
+
+    return semid;
+}
+
+// Funkcja P (blokowanie semafora)
+void semaphore_wait(int semid) {
+    struct sembuf op;
+    op.sem_num = 0; // Numer semafora w zestawie (zazwyczaj 0, bo mamy jeden)
+    op.sem_op = -1; // Czekaj (dekrementacja)
+    op.sem_flg = 0;
+    if (semop(semid, &op, 1) == -1) {
+        perror("semop wait failed");
+        exit(1);
+    }
+}
+
+// Funkcja V (odblokowanie semafora)
+void semaphore_signal(int semid) {
+    struct sembuf op;
+    op.sem_num = 0; // Numer semafora w zestawie
+    op.sem_op = 1;  // Zwolnij (inkrementacja)
+    op.sem_flg = 0;
+    if (semop(semid, &op, 1) == -1) {
+        perror("semop signal failed");
+        exit(1);
+    }
+}
 
 // Funkcja wysyłająca komunikat
 void send_message(int mqid, long type, const char* message) {
@@ -57,6 +107,36 @@ void receive_message(int mqid, long type, char* buffer_text, size_t buffer_size)
         strncpy(buffer_text, buffer.mtext, buffer_size - 1);
         buffer_text[buffer_size - 1] = '\0';
     }
+}
+
+void register_process(int shmid, pid_t pid, int semid) {
+    // Operacja P (blokowanie semafora)
+    printf("Locking semaphore...\n");
+    semaphore_wait(semid);
+
+    printf("Accessing shared memory...\n");
+    struct shared_memory shm = (struct shared_memory)shmat(shmid, NULL, 0);
+    if (shm == (void *)-1) {
+        perror("shmat failed");
+        semaphore_signal(semid);  // Zwolnienie semafora w przypadku błędu
+        exit(1);
+    }
+
+    if (shm->count < MAX_PROCESSES) {
+        shm->process_ids[shm->count++] = pid;
+        printf("Registered process %d. Total: %d\n", pid, shm->count);
+    } else {
+        fprintf(stderr, "Shared memory is full. Cannot register more processes.\n");
+    }
+
+    // Odłączenie pamięci współdzielonej
+    if (shmdt(shm) == -1) {
+        perror("shmdt failed");
+    }
+
+    // Operacja V (zwolnienie semafora)
+    printf("Unlocking semaphore...\n");
+    semaphore_signal(semid);
 }
 
 // Funkcja wątku reprezentującego osobę w grupie
@@ -103,6 +183,31 @@ int main(int argc, char* argv[]) {
         exit(EXIT_FAILURE);
     }
 
+    key_t sh_sem_key = ftok(".", 'O');
+    if (sh_sem_key < 0) {
+        perror(GREEN "ERROR ftok [klient]" RESET);
+        exit(EXIT_FAILURE);
+    }
+
+    int sh_semid = init_semaphore(sh_sem_key, 1);
+
+    key_t sh_key = ftok(".", 'L');
+    if (sh_key < 0) {
+        perror(GREEN "ERROR ftok [klient]" RESET);
+        exit(EXIT_FAILURE);
+    }
+
+    int shmid = shmget(sh_key, sizeof(struct shared_memory), IPC_CREAT | 0666);
+    printf("SHMID: %d", shmid);
+    if (shmid < 0) {
+        perror("shmget failed");
+        exit(1);
+    }
+
+    sleep(1);
+
+    register_process(shmid, sh_semid, getpid());
+
     printf(GREEN "Jestem procesem generującym wątki klientów! Liczba osób: %d\n" RESET, group_size);
 
     // Inicjalizacja struktury grupy klienta
@@ -136,6 +241,7 @@ int main(int argc, char* argv[]) {
         perror(GREEN "ERROR ftok [klient]" RESET);
         exit(EXIT_FAILURE);
     }
+
 
     // Uzyskanie dostępu do semafora
     int semid = semget(sem_key, 1, 0);
