@@ -9,19 +9,15 @@
 #include <sys/sem.h>
 #include <sys/wait.h>
 #include <signal.h>
-#include <fcntl.h>
 #include <errno.h>
 
-#define MAX_ACTIVE_CLIENTS 100  // Definicja z wartością lub usuń jeśli nie jest potrzebna
-
-// Definicje kolorów ANSI
 #define RESET   "\033[0m"
 #define CYAN    "\033[33m"
 
-// Funkcja do sprawdzania argumentów wywołania programu - liczba stolików
+// Funkcja sprawdzająca argumenty (liczba stolików)
 int arg_check(int argc, char * argv[]){
     if(argc != 5){
-        fprintf(stderr, CYAN "Podano nieodpowiednia liczbe argumentow! [argc != 5] \n" RESET);
+        fprintf(stderr, CYAN "Podano nieodpowiednia liczbe argumentow! [argc != 5]\n" RESET);
         exit(3);
     }
 
@@ -30,153 +26,115 @@ int arg_check(int argc, char * argv[]){
     int a3 = atoi(argv[3]);
     int a4 = atoi(argv[4]);
 
-    int liczba_stolikow = 0;
-
-    if(a1 < 0 || a2 < 0 || a3 < 0 || a4 < 0)
-    {
+    if(a1 < 0 || a2 < 0 || a3 < 0 || a4 < 0){
         fprintf(stderr, CYAN "Nie mozna podawac ujemnych liczb stolikow!\n" RESET);
         exit(4);
     }
 
-    liczba_stolikow = a1 + a2 + a3 + a4;
-
+    int liczba_stolikow = a1 + a2 + a3 + a4;
     if(liczba_stolikow < 1){
-        fprintf(stderr, CYAN "W restauracji musi byc co najmniej jeden stolik! \n" RESET);
+        fprintf(stderr, CYAN "W restauracji musi byc co najmniej jeden stolik!\n" RESET);
         exit(5);
     }
-    printf(CYAN "Poprawna ilosc stolikow! \n" RESET);
-
-    return(liczba_stolikow); 
+    printf(CYAN "Poprawna ilosc stolikow!\n" RESET);
+    return liczba_stolikow; 
 }
 
-// Funkcja do obliczania liczby miejsc w restauracji
-int liczba_miejsc(char * argv[]){ 
-
+// Funkcja do obliczania liczby miejsc
+int liczba_miejsc(char * argv[]){
     int a1 = atoi(argv[1]);
     int a2 = atoi(argv[2]);
     int a3 = atoi(argv[3]);
     int a4 = atoi(argv[4]);
-    
-    int liczba_miejsc = a1 * 1 + a2 * 2 + a3 * 3 + a4 * 4;
-
-    return(liczba_miejsc);
+    return (a1*1 + a2*2 + a3*3 + a4*4);
 }
 
 int main(int argc, char* argv[])
 {
+    // Wyłączenie buforowania
+    setbuf(stdout, NULL);
+
     srand(time(NULL));
-    //for(int x= 0; x < 1000; x++) {printf("x: %d ", rand());}
-    
+
+    // Sprawdzenie argumentów i obliczenie stolików
     int liczba_stolikow = arg_check(argc, argv);
     int max_klient = liczba_miejsc(argv);
     int main_id = getpid();
-    
-    // Tworzenie procesu kasjera
-    pid_t kasjer_id = fork();
-    switch(kasjer_id){
-        case -1:
-            perror("ERROR przy tworzeniu kasjera! (main)");
-            exit(1);
-        case 0:
-            // Przekazujemy dodatkowy argument: czas_dzialania_pizzerii
-            // Ten argument będzie dodany później
-            // Dla teraz, przekazujemy 0 jako placeholder
-            execl("./kasjer", "kasjer", argv[1], argv[2], argv[3], argv[4], NULL);
-            perror("ERROR execl [kasjer]");
-            exit(6);
-    } 
 
-    sleep(2);
-
-    // Tworzenie procesu strażaka
-    pid_t strazak_id = fork();  //TODO przyjmowanie pidu kasjera maina i liczba stolikow do opróżnienia 
-    switch(strazak_id){
-        case -1:
-            perror("ERROR przy tworzeniu strazaka!");
-            exit(2);
-        case 0:{
-
-            char str_main_id[20];
-            char str_kasjer_id[20];
-            char str_liczba_stolikow[20];
-
-            sprintf(str_main_id, "%d", main_id);
-            sprintf(str_kasjer_id, "%d", kasjer_id);
-            sprintf(str_liczba_stolikow, "%d", liczba_stolikow);
-            
-            execl("./strazak", "strazak", str_main_id, str_kasjer_id, str_liczba_stolikow, (char *)NULL);
-
-            perror("ERROR przy wywolaniu strazaka! (main prog -> execl) \n");
-            exit(7);
-        }
-
-        default: 
-            break;
-    }
-
-    printf(CYAN "PID programu glownego [main prog]: %d \n" RESET, main_id);
-    printf(CYAN "PID kasjera [main prog]: %d \n" RESET, kasjer_id);
-    printf(CYAN "PID strazaka [main prog]: %d \n" RESET, strazak_id);
-
-
-
-    // Generowanie czasu działania pizzerii
-    int czas_dzialania_pizzerii = rand() % 61 + 30; // czas w zakresie od 30 do 90 sekund
+    // Losowy czas pizzerii 30..90 s
+    int czas_dzialania_pizzerii = rand() % 61 + 30;
     time_t czas_aktualny = time(NULL);
+
     printf(CYAN "Czas dzialania pizzerii: %d sekund\n" RESET, czas_dzialania_pizzerii);
 
-    // Tworzenie nowego procesu kasjera z przekazanym czasem działania
-    pid_t nowy_kasjer_id = fork();
-    if(nowy_kasjer_id == -1){
-        perror("ERROR przy tworzeniu nowego kasjera! (main)");
+    // Uruchamiamy kasjera
+    pid_t kasjer_id = fork();
+    if(kasjer_id == -1){
+        perror("ERROR przy tworzeniu kasjera (main)");
         exit(8);
     }
-    if(nowy_kasjer_id == 0){
-        // Przekazanie czasu działania pizzerii jako dodatkowego argumentu
-        char str_czas_dzialania_pizzerii[12];
-        sprintf(str_czas_dzialania_pizzerii, "%d", czas_dzialania_pizzerii);
-
-        execl("./kasjer", "kasjer", argv[1], argv[2], argv[3], argv[4], str_czas_dzialania_pizzerii, NULL);
-        perror("ERROR execl [nowy kasjer]");
+    if(kasjer_id == 0){
+        char str_czas[12];
+        sprintf(str_czas, "%d", czas_dzialania_pizzerii);
+        execl("./kasjer", "kasjer", argv[1], argv[2], argv[3], argv[4],
+              str_czas, NULL);
+        perror("ERROR execl [kasjer]");
         exit(6);
     }
 
+    // Krótka przerwa, by kasjer się uruchomił
+    sleep(2);
 
-    // Generowanie grup klientów w pętli
-    while((time(NULL) - czas_aktualny) < czas_dzialania_pizzerii){
-        
-        char str_liczba_osob[12];
-        int liczba_osob = rand() % 4 + 1; // generuje liczbe osob w grupie
-        
-        sprintf(str_liczba_osob, "%d", liczba_osob);
-        //int test_pid = getpid();
-        //printf("LICZBA OSOB: %d, PID: %d \n", liczba_osob, test_pid);
-        
-        //FIXME odebranie przez klienta grupy do utworzenia wątkow
-        
-        pid_t klient_pr_id = fork();
-        //FIXME generuj tylko jezeli jest mniej klientow niz max mozliwych
-        switch(klient_pr_id){
-            case -1:
-                perror("ERROR przy wywolaniu procesu klienta! (main prog -> execl) \n");
-                exit(9);
-            case 0:{
-                execl("./klient", "klient", str_liczba_osob, (char *)NULL); //FIXME group size ma byc a nie liczba grup!!!!!!!
-                perror("ERROR przy wywolaniu procesu klienta! [main prog]\n");
-                exit(10);
-            }
-            default:
-                break;
-        }
-         sleep(3);
+    // Uruchamiamy strażaka
+    pid_t strazak_id = fork();
+    if(strazak_id == -1){
+        perror("ERROR przy tworzeniu strazaka!");
+        exit(2);
+    }
+    if(strazak_id == 0){
+        // dziecko -> strażak
+        char str_main[20], str_kasjer[20], str_stolikow[20];
+        sprintf(str_main, "%d", main_id);
+        sprintf(str_kasjer, "%d", kasjer_id);
+        sprintf(str_stolikow, "%d", liczba_stolikow);
+
+        execl("./strazak", "strazak", str_main, str_kasjer, str_stolikow, NULL);
+        perror("ERROR execl [strazak]");
+        exit(7);
     }
 
-    printf(CYAN "Koniec czasu pizzerii! [main prog]\n" RESET);
+    printf(CYAN "PID programu glownego [main]: %d\n" RESET, main_id);
+    printf(CYAN "PID kasjera [main]: %d\n" RESET, kasjer_id);
+    printf(CYAN "PID strazaka [main]: %d\n" RESET, strazak_id);
 
-    // Czekanie na zakończenie wszystkich procesów potomnych
+    // Generowanie klientów do upływu czasu pizzerii
+    while((time(NULL) - czas_aktualny) < czas_dzialania_pizzerii){
+        char str_liczba_osob[12];
+        int liczba_osob = rand() % 4 + 1; // 1..4
+        sprintf(str_liczba_osob, "%d", liczba_osob);
+
+        pid_t klient_pid = fork();
+        if(klient_pid == -1){
+            perror("ERROR przy fork [klient]");
+            exit(9);
+        }
+        if(klient_pid == 0){
+            execl("./klient", "klient", str_liczba_osob, NULL);
+            perror("ERROR execl [klient]");
+            exit(10);
+        }
+        //sleep(3);
+    }
+
+    printf(CYAN "Koniec czasu pizzerii! [main]\n" RESET);
+
+    // Zabijamy kasjera i strażaka, jeśli żyją
+    kill(kasjer_id, SIGINT);
+    kill(strazak_id, SIGINT);
+
+    // Czekamy na wszystkie procesy potomne (kasjera, strażaka i klientów)
     while(wait(NULL) > 0);
 
-    printf(CYAN "Wszystkie procesy potomne zostaly zakonczone. [main prog]\n" RESET);
-
+    printf(CYAN "Wszystkie procesy potomne zostaly zakonczone. [main]\n" RESET);
     return 0;
 }
