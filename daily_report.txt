@@ -1,0 +1,14 @@
+----- Dzienny raport pizzerii -----
+Liczba obsłużonych osób: 44
+Całkowity utarg: 1897.56 zł
+Sprzedane produkty:
+  Pizza Simple: 0
+  Pizza Caprese: 6
+  Pizza Napoli: 2
+  Pizza Pepperoni: 10
+  Pizza Spicy Salami: 8
+  Pizza Hawaii: 4
+  Pizza Diablo: 3
+  Pizza Mare e Monti: 2
+  Pizza Rustica: 5
+  Pizza Veggie: 4
