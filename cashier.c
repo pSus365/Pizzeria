@@ -193,7 +193,7 @@ int main(int argc, char* argv[]) {
     setupTables(allTables, 0, st1, 1);
     setupTables(allTables, st1, st1+st2, 2);
     setupTables(allTables, st1+st2, st1+st2+st3, 3);
-    setupTables(allTables, st1+st2+st3, st1+st2+st3+st4, 4);
+    setupTables(allTables, st1+st2+st3, st1+st2+st3+st4, 4); 
 
     // Kolejka oczekujących
     ClientsQueue waitingLine;
