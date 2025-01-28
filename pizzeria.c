@@ -121,10 +121,22 @@ void semaphoreV(int semId, int semNum) {
     }
 }
 
+/**
+ * Wypisuje na ekran informację o wybranej pizzy (nazwa + cena),
+ * używając indeksu w globalnej tablicy pizzaMenu.
+ * @param id Indeks w tablicy pizzaMenu (0-9).
+ */
+
 // --------------------- Funkcja wypisująca zamówienie jednej osoby ---------------------
 void showChosenPizza(int id) {
     printf(CLR_CLIENT "Wybiera: %s (%.2lf zł)\n" CLR_RESET, pizzaMenu[id].name, pizzaMenu[id].cost);
 }
+
+/**
+ * Inicjuje pustą kolejkę oczekujących.
+ * @param q Wskaźnik na strukturę kolejki.
+ * @param limit Maksymalny rozmiar kolejki (maxSize).
+ */
 
 // --------------------- Kolejka oczekujących (implementacja) ---------------------
 void initQueue(ClientsQueue* q, int limit) {
@@ -133,9 +145,22 @@ void initQueue(ClientsQueue* q, int limit) {
     q->currentSize  = 0;
 }
 
+/**
+ * Zwraca aktualny rozmiar kolejki (liczbę czekających grup).
+ * @param q Wskaźnik na strukturę kolejki.
+ * @return Liczba elementów w kolejce (q->currentSize).
+ */
+
 int queueSize(const ClientsQueue* q) {
     return q->currentSize;
 }
+
+/**
+ * Dodaje nową grupę do końca kolejki, jeśli jest miejsce.
+ * @param q Wskaźnik na strukturę kolejki.
+ * @param g Grupa (pid, size) do wstawienia.
+ * @note Nie sprawdza limitu, zakładamy że wywołujący zrobi to wcześniej.
+ */
 
 void enqueueGroup(ClientsQueue* q, const GroupOfClients* g) {
     QueueNode* node = (QueueNode*)calloc(1, sizeof(QueueNode));
@@ -153,6 +178,19 @@ void enqueueGroup(ClientsQueue* q, const GroupOfClients* g) {
     }
     q->currentSize++;
 }
+
+/**
+ * Wyszukuje i usuwa z kolejki pierwszą grupę, która pasuje do wymagań:
+ * - Jeśli neededSize == 0, to każda grupa o size <= freeSeats może wejść.
+ * - Jeśli neededSize != 0, to tylko grupa z size == neededSize i size <= freeSeats.
+ * Usuwa ją z listy i zwraca kopię zaalokowaną dynamicznie.
+ * Jeśli nie znajdzie, zwraca NULL.
+ *
+ * @param q Wskaźnik na kolejkę.
+ * @param neededSize Rozmiar grupy "dominującej" w stoliku (0 oznacza pusty stolik).
+ * @param freeSeats Liczba wolnych miejsc w stoliku.
+ * @return Wskaźnik na strukturę GroupOfClients lub NULL (jeśli brak odpowiedniej grupy).
+ */
 
 GroupOfClients* dequeueSuitable(ClientsQueue* q, int neededSize, int freeSeats) {
     if (q->head == NULL) {

@@ -3,9 +3,19 @@
 #include <stdlib.h>
 #include <sys/wait.h>
 #include <errno.h>
-#include <sched.h>   // <-- potrzebne do sched_yield()
+#include <sched.h>
 
 static volatile sig_atomic_t fireEvent = 0;
+
+/**
+ * Handler sygnału SIGUSR1 (pożar).
+ * Ustawia flagę fireEvent = 1, co pozwala managerowi
+ * wiedzieć, że musi zakończyć pętlę generowania klientów.
+ *
+ * @param sig Numer sygnału (oczekiwany SIGUSR1).
+ */
+static void signalFire(int sig);
+
 
 // Obsługa sygnału pożaru
 static void signalFire(int sig) {
@@ -13,6 +23,17 @@ static void signalFire(int sig) {
         fireEvent = 1;
     }
 }
+
+/**
+ * Sprawdza poprawność 4 argumentów przekazanych do managera.
+ * Każdy argument oznacza liczbę stolików (1-os, 2-os, 3-os, 4-os).
+ * Wymaga, aby >= 0 i przynajmniej jeden z nich był > 0.
+ * Jeśli niepoprawne, wypisuje błąd i kończy program.
+ *
+ * @param argc Liczba argumentów w main.
+ * @param argv Tablica argumentów.
+ * @return Suma (x1 + x2 + x3 + x4).
+ */
 
 // Walidacja argumentów: X1, X2, X3, X4
 static int validateArgs(int argc, char* argv[]) {
@@ -31,6 +52,12 @@ static int validateArgs(int argc, char* argv[]) {
     return x1 + x2 + x3 + x4;
 }
 
+/**
+ * Odczytuje i wypisuje zawartość pliku "daily_report.txt",
+ * w którym kasjer zapisuje dzienny raport pizzerii.
+ * Jeśli plik nie istnieje, wypisuje błąd.
+ */
+
 // Wyświetlenie raportu na koniec (plik daily_report.txt)
 static void displayReport() {
     int fd = open("daily_report.txt", O_RDONLY);
@@ -46,6 +73,22 @@ static void displayReport() {
     }
     close(fd);
 }
+
+/**
+ * Główny proces menedżera pizzerii:
+ * 1) Waliduje argumenty (liczba stolików).
+ * 2) Uruchamia kasjera (cashier_app).
+ * 3) Czeka, aż kasjer utworzy zasoby (semafor, shm).
+ * 4) Uruchamia strażaka (fireman_app).
+ * 5) Generuje procesy klienta w pętli, ograniczając liczbę aktywnych.
+ * 6) Po upływie czasu lub sygnale pożaru przestaje generować klientów.
+ * 7) Czeka, aż kasjer się zakończy, usuwa semafor i shm.
+ * 8) Wyświetla końcowy raport z pliku "daily_report.txt".
+ *
+ * @param argc Liczba argumentów.
+ * @param argv [1]..[4] zawierają ilości stolików 1-os, 2-os, 3-os, 4-os.
+ * @return Kod zakończenia (0 przy sukcesie).
+ */
 
 // --------------------------------------------------------
 int main(int argc, char* argv[]) {

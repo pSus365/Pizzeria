@@ -6,6 +6,14 @@
 
 static pthread_mutex_t localMutex;
 
+/**
+ * Handler sygnału SIGUSR1 (pożar).
+ * Wypisuje komunikat i wywołuje exit(0),
+ * co oznacza nagłą ucieczkę z lokalu.
+ *
+ * @param sig Numer sygnału (oczekiwany SIGUSR1).
+ */
+
 // Sygnał pożaru
 static void handleFireSignal(int sig) {
     if (sig == SIGUSR1) {
@@ -13,6 +21,18 @@ static void handleFireSignal(int sig) {
         exit(0);
     }
 }
+
+/**
+ * Wątek reprezentujący jedną osobę w grupie.
+ * - Blokuje mutex localMutex,
+ * - Szuka wolnego miejsca w tablicy go->selection,
+ * - Wpisuje losowy indeks pizzy (rand()%10),
+ * - Wypisuje informację o wybranej pizzy,
+ * - Zwalnia mutex i kończy.
+ *
+ * @param arg Wskaźnik na strukturę GroupOrder (zawiera tablicę orders i liczbę osób).
+ * @return Zwraca NULL (kończący wątek).
+ */
 
 // Wątek reprezentujący jedną osobę w grupie
 void* singlePersonOrder(void* arg) {
@@ -32,6 +52,15 @@ void* singlePersonOrder(void* arg) {
     pthread_exit(NULL);
 }
 
+/**
+ * Sprawdza czy program klienta ma 1 argument:
+ * <liczba_osób_w_grupie> (1..3).
+ * Jeśli błędnie, wypisuje komunikat i exit(1).
+ *
+ * @param argc liczba argumentów,
+ * @param argv tablica argumentów.
+ */
+
 static void usageCheck(int argc, char* argv[]) {
     if (argc != 2) {
         fprintf(stderr, CLR_CLIENT "Użycie: ./client_app <liczba_osób_w_grupie>\n" CLR_RESET);
@@ -43,6 +72,26 @@ static void usageCheck(int argc, char* argv[]) {
         exit(1);
     }
 }
+
+/**
+ * Główna funkcja klienta (grupy 1-3 osób):
+ * 1) Sprawdza argument (usageCheck).
+ * 2) Ustawia handler SIGUSR1 (pożar).
+ * 3) Dołącza do kolejki msgQueue utworzonej przez kasjera.
+ * 4) Wysyła REQUEST_TABLE, czeka na odpowiedź:
+ *    - NO_TABLE_FOUND => wychodzi,
+ *    - NEAR_CLOSING   => wychodzi,
+ *    - w przeciwnym razie otrzymuje tableIndex (>=0).
+ * 5) Tworzy wątki (po 1 na osobę w grupie), każdy losuje pizzę.
+ * 6) Wysyła SEND_ORDER z informacjami o zamówionych pizzach.
+ * 7) Symuluje czas jedzenia (sleep).
+ * 8) Wysyła LEAVE_TABLE, by zwolnić stolik.
+ * 9) Kończy proces.
+ *
+ * @param argc Liczba argumentów (powinno być 2).
+ * @param argv [1] -> liczba osób w grupie (1..3).
+ * @return 0 przy pomyślnym zakończeniu.
+ */
 
 int main(int argc, char* argv[]) {
     usageCheck(argc, argv);
@@ -71,10 +120,10 @@ int main(int argc, char* argv[]) {
 
     // Wysyłamy zapytanie o stolik
     CommunicationMessage req;
-    req.mtype          = REQUEST_TABLE;
-    req.group.size     = groupSize;
+    req.mtype = REQUEST_TABLE;
+    req.group.size = groupSize;
     req.group.groupPID = myPid;
-    req.tableIndex     = -1;
+    req.tableIndex = -1;
     for (int i = 0; i < 3; i++) {
         req.orderedItems[i] = -1;
     }
@@ -119,11 +168,11 @@ int main(int argc, char* argv[]) {
 
     GroupOrder go;
     go.selection = myOrders;
-    go.count     = groupSize;
+    go.count = groupSize;
 
     pthread_t* threads = (pthread_t*)calloc(groupSize, sizeof(pthread_t));
     for (int i = 0; i < groupSize; i++) {
-        if (pthread_create(&threads[i], NULL, singlePersonOrder, &go) != 0) {
+        if (pthread_create(&threads[i], NULL, singlePersonOrder, &go) != 0) { // tworzę wątki które wykonują funkcję singlePersonOrder()
             perror(CLR_CLIENT "[Klient] Błąd pthread_create()" CLR_RESET);
             exit(1);
         }
@@ -137,10 +186,10 @@ int main(int argc, char* argv[]) {
 
     // Wysyłamy zamówienie do kasjera
     CommunicationMessage orderMsg;
-    orderMsg.mtype          = SEND_ORDER;
-    orderMsg.group.size     = groupSize;
+    orderMsg.mtype = SEND_ORDER;
+    orderMsg.group.size = groupSize;
     orderMsg.group.groupPID = myPid;
-    orderMsg.tableIndex     = resp.tableIndex;
+    orderMsg.tableIndex = resp.tableIndex;
 
     double sumCost = 0.0;
     for (int i = 0; i < groupSize; i++) {
@@ -162,10 +211,10 @@ int main(int argc, char* argv[]) {
 
     // Zwalniamy stolik
     CommunicationMessage leaveMsg;
-    leaveMsg.mtype          = LEAVE_TABLE;
-    leaveMsg.group.size     = groupSize;
+    leaveMsg.mtype = LEAVE_TABLE;
+    leaveMsg.group.size = groupSize;
     leaveMsg.group.groupPID = myPid;
-    leaveMsg.tableIndex     = resp.tableIndex;
+    leaveMsg.tableIndex = resp.tableIndex;
     for (int i = 0; i < 3; i++) {
         leaveMsg.orderedItems[i] = -1;
     }

@@ -9,6 +9,15 @@ static volatile sig_atomic_t fireSignal    = 0;
 static volatile sig_atomic_t closeIsNear   = 0;
 static volatile unsigned long forcedFinish = ULONG_MAX;
 
+/**
+ * Handler sygnałów:
+ * - SIGUSR1 -> ustawia fireSignal = 1 (pożar, kończymy pętlę).
+ * - SIGUSR2 -> ustawia closeIsNear = 1 i oblicza forcedFinish
+ *   (za ile sekund faktycznie się zamkniemy).
+ *
+ * @param sig Numer sygnału (SIGUSR1 lub SIGUSR2).
+ */
+
 // -------------------------------------
 static void handleSignals(int sig) {
     if (sig == SIGUSR1) {
@@ -19,6 +28,17 @@ static void handleSignals(int sig) {
         forcedFinish  = (unsigned long)time(NULL) + TIME_BEFORE_CLOSE;
     }
 }
+
+/**
+ * Inicjuje fragment tablicy stolików w zakresie [start..end-1].
+ * Ustawia capacity = cap, group_size = 0, total_seated = 0,
+ * occupant_pids[j] = 0.
+ *
+ * @param t Tablica DiningTable.
+ * @param start Indeks początkowy.
+ * @param end Indeks końcowy (niewłączny).
+ * @param cap Pojemność (1,2,3,4).
+ */
 
 // -------------------------------------
 static void setupTables(DiningTable* t, int start, int end, int cap) {
@@ -31,6 +51,20 @@ static void setupTables(DiningTable* t, int start, int end, int cap) {
         t[i].total_seated = 0;
     }
 }
+
+/**
+ * Szuka wolnego stolika (lub pasującego do danej wielkości grupy)
+ * w tablicy t. Jeśli closeIsNear == 1, zwraca NEAR_CLOSING.
+ * W przeciwnym razie przechodzi przez wszystkie stoliki i sprawdza:
+ *   - czy stolik jest pusty lub ma group_size równy rozmiarowi grupy,
+ *   - czy jest w nim dość miejsca (capacity - total_seated >= groupSize).
+ * Gdy znajdzie, zwraca indeks stolika; w przeciwnym razie NO_TABLE_FOUND.
+ *
+ * @param t Tablica DiningTable.
+ * @param groupSize Wielkość grupy.
+ * @param count Liczba stolików w tablicy.
+ * @return Indeks stolika >= 0, NEAR_CLOSING lub NO_TABLE_FOUND.
+ */
 
 // -------------------------------------
 static int findFreeTable(DiningTable* arr, int groupSize, int count) {
@@ -45,6 +79,19 @@ static int findFreeTable(DiningTable* arr, int groupSize, int count) {
     }
     return NO_TABLE_FOUND;
 }
+
+/**
+ * Usadza daną grupę (groupPID, size) przy stoliku o indeksie tableIdx:
+ * 1) Ustawia, jeśli total_seated == 0, group_size = group->size.
+ * 2) Zwiększa total_seated o group->size.
+ * 3) Szuka pustego slotu occupant_pids[] i wpisuje tam PID grupy.
+ * 4) Wysyła do klienta komunikat z jego PIDem i tableIndex.
+ *
+ * @param t Tablica DiningTable.
+ * @param tableIdx Indeks stolika w tablicy.
+ * @param grp Informacje o grupie (pid, size).
+ * @param msg_id Id kolejki, by wysłać odpowiedź do klienta.
+ */
 
 static void seatGroupAtTable(DiningTable* arr, int tableIdx, const GroupOfClients* grp, int queueId) {
     if (arr[tableIdx].total_seated == 0) {
@@ -72,6 +119,18 @@ static void seatGroupAtTable(DiningTable* arr, int tableIdx, const GroupOfClient
     }
 }
 
+/**
+ * Usuwa grupę (gPID, size) ze stolika o indeksie idx:
+ * 1) W occupant_pids[] szuka PID == gPID i ustawia 0.
+ * 2) Zmniejsza total_seated o size.
+ * 3) Jeśli total_seated == 0, ustawia group_size = 0.
+ *
+ * @param t Tablica stolików.
+ * @param idx Numer stolika.
+ * @param gPID PID grupy.
+ * @param size Rozmiar grupy.
+ */
+
 static void removeGroupFromTable(DiningTable* arr, int idx, pid_t gPID, int size) {
     for (int j = 0; j < 4; j++) {
         if (arr[idx].occupant_pids[j] == gPID) {
@@ -84,6 +143,22 @@ static void removeGroupFromTable(DiningTable* arr, int idx, pid_t gPID, int size
         arr[idx].group_size = 0;
     }
 }
+
+/**
+ * Próbujemy usadzić grupy z kolejki "q" na dostępnych stolikach "t".
+ * Iterujemy po wszystkich stolikach. Dla każdego:
+ *   - obliczamy wolne miejsce (freeSpace),
+ *   - jeśli wolne miejsce > 0,
+ *     - sprawdzamy, czy jest już group_size (grpSize). Jeśli freeSpace < grpSize i grpSize != 0, pomijamy.
+ *     - wywołujemy dequeueSuitable(q, grpSize, freeSpace).
+ *       Jeśli znajdzie grupę (newG != NULL), przydzielamy ją seatGroupAtTable(...) i zaznaczamy updated=1.
+ *   - Dopóki updated=1, powtarzamy całą procedurę (while).
+ *
+ * @param t Tablica stolików.
+ * @param q Kolejka oczekujących.
+ * @param tcount Liczba stolików.
+ * @param msg_id Id kolejki (do seatGroupAtTable).
+ */
 
 static void trySeatQueue(DiningTable* t, ClientsQueue* q, int tcount, int qid) {  //Staramy się rozładować kolejkę w razie możliwości
     int updated = 1;
@@ -109,6 +184,16 @@ static void trySeatQueue(DiningTable* t, ClientsQueue* q, int tcount, int qid) {
     }
 }
 
+/**
+ * Informuje wszystkie grupy w kolejce, że pizzeria
+ * "zaraz się zamyka" (NEAR_CLOSING). Wysyła do każdej
+ * w kolejce komunikat z tableIndex = NEAR_CLOSING.
+ * Następnie ustawia current_size = 0, aby nikt nie czekał.
+ *
+ * @param q Kolejka oczekujących.
+ * @param msg_id Id kolejki.
+ */
+
 static void sendClosingSoon(ClientsQueue* q, int queueId) {
     QueueNode* iter = q->head;
     while (iter) {
@@ -127,6 +212,14 @@ static void sendClosingSoon(ClientsQueue* q, int queueId) {
     q->currentSize = 0;
 }
 
+/**
+ * Wyświetla status wszystkich stolików (capacity, total_seated,
+ * group_size, occupant_pids).
+ *
+ * @param t Tablica DiningTable.
+ * @param count Liczba stolików.
+ */
+
 static void showCurrentTables(DiningTable* arr, int count) {
     printf(CLR_CASHIER "\n--- Stoliki w lokalu ---\n" CLR_RESET);
     for (int i = 0; i < count; i++) {
@@ -140,6 +233,26 @@ static void showCurrentTables(DiningTable* arr, int count) {
     }
     printf(CLR_CASHIER "************************\n\n" CLR_RESET);
 }
+
+/**
+ * Główny proces kasjera:
+ * 1) Pobiera argumenty (x1, x2, x3, x4) = liczby stolików 1,2,3,4-osobowych.
+ * 2) Tworzy zasoby IPC: semafor, shm (tablica DiningTable) i msgQueue.
+ * 3) Inicjuje stoliki (setupTables(...) w czterech kawałkach).
+ * 4) W pętli odbiera:
+ *    - REQUEST_TABLE: sprawdza kolejkę, findFreeTable; jeśli brak miejsca -> do kolejki,
+ *      jeśli zaraz zamykamy -> NEAR_CLOSING, itp.
+ *    - SEND_ORDER: zlicza sprzedane pizze i przychód.
+ *    - LEAVE_TABLE: zwalnia stolik, znów próbuje wpuścić kogoś z kolejki.
+ *    - Reaguje też na sygnały pożaru (SIGUSR1) i zamknięcia (SIGUSR2).
+ * 5) Po wyjściu z pętli czeka, aż stoliki się opróżnią.
+ * 6) Tworzy raport "daily_report.txt" z sumą sprzedanych pizz i przychodem.
+ * 7) Usuwa kolejkę (deleteMessageQueue), odłącza pamięć (shmdt).
+ *
+ * @param argc Liczba argumentów (powinno być 5).
+ * @param argv x1, x2, x3, x4 -> stoliki 1,2,3,4-osobowe.
+ * @return Kod wyjścia (0).
+ */
 
 // -------------------------------------
 int main(int argc, char* argv[]) {
@@ -200,9 +313,9 @@ int main(int argc, char* argv[]) {
     initQueue(&waitingLine, QUEUE_LIMIT);
 
     // Statystyki dzienne
-    int    soldItems[10] = {0};
+    int soldItems[10] = {0};
     double totalRevenue  = 0.0;
-    int    totalClients  = 0;
+    int totalClients  = 0;
 
     printf(CLR_CASHIER "[Kasjer] Startuję z obsługą!\n" CLR_RESET);
     while (!fireSignal && (unsigned long)time(NULL) < forcedFinish) {
@@ -220,14 +333,14 @@ int main(int argc, char* argv[]) {
             }
             int tIdx = findFreeTable(allTables, msg.group.size, total);
             if (tIdx == NEAR_CLOSING) {
-                msg.mtype      = msg.group.groupPID;
+                msg.mtype = msg.group.groupPID;
                 msg.tableIndex = NEAR_CLOSING;
                 printf(CLR_CASHIER "[Kasjer] Grupa PID(%d), zamykamy wkrótce, nie wpuszczam.\n" CLR_RESET,
                        (int)msg.group.groupPID);
                 msgsnd(msgId, &msg, sizeof(msg) - sizeof(long), 0);
             } else if (tIdx == NO_TABLE_FOUND) {
                 if (queueSize(&waitingLine) >= QUEUE_LIMIT) {
-                    msg.mtype      = msg.group.groupPID;
+                    msg.mtype = msg.group.groupPID;
                     msg.tableIndex = NO_TABLE_FOUND;
                     printf(CLR_CASHIER "[Kasjer] Grupa PID(%d), kolejka jest przepełniona.\n" CLR_RESET,
                            (int)msg.group.groupPID);

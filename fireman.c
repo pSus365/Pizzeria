@@ -2,12 +2,38 @@
 #include <stdio.h>
 #include <stdlib.h>
 
+/**
+ * Handler sygnału SIGTERM (wysyłany np. przez managera,
+ * gdy pożar się nie wydarzył).
+ * Wypisuje, że strażak wychodzi i wywołuje exit(0).
+ *
+ * @param sig Numer sygnału (SIGTERM).
+ */
+
 static void onTermSignal(int sig) {
     if (sig == SIGTERM) {
         printf(CLR_FIREMAN "[Strażak] Otrzymałem SIGTERM – wychodzę, bo nie jestem już potrzebny.\n" CLR_RESET);
         exit(0);
     }
 }
+
+/**
+ * Proces strażaka:
+ * 1) Odbiera parametry: <pid_kasjera>, <pid_managera>, <liczba_stolików>.
+ * 2) Ustawia handler SIGTERM (manager może go zabić, gdy nie ma pożaru).
+ * 3) Dołącza do semafora i pamięci współdzielonej (klucze ftok()).
+ * 4) Czeka losowy czas (0-600s).
+ * 5) Ogłasza pożar:
+ *    - kill(cashierPid, SIGUSR1) (kasjer -> fireSignal=1),
+ *    - blokuje semafor i każdemu occupant_pids w tablicy stolików wysyła SIGUSR1,
+ *      ustawia total_seated=0,
+ *    - kill(managerPid, SIGUSR1).
+ * 6) Odłącza pamięć (shmdt) i kończy.
+ *
+ * @param argc liczba argumentów (powinno być 4).
+ * @param argv pid_kasjera, pid_managera, liczba_stolików.
+ * @return Kod wyjścia (0).
+ */
 
 int main(int argc, char* argv[]) {
     if (argc != 4) {
