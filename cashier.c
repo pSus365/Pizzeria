@@ -85,22 +85,22 @@ static void removeGroupFromTable(DiningTable* arr, int idx, pid_t gPID, int size
     }
 }
 
-static void trySeatQueue(DiningTable* t, ClientsQueue* q, int tcount, int qid) {
+static void trySeatQueue(DiningTable* t, ClientsQueue* q, int tcount, int qid) {  //Staramy się rozładować kolejkę w razie możliwości
     int updated = 1;
     while (updated) {
         updated = 0;
         for (int i = 0; i < tcount; i++) {
             int freeSpace = t[i].capacity - t[i].total_seated;
-            if (freeSpace <= 0) {
+            if (freeSpace <= 0) {  //stolik jest pełny i nie ma możliwości nikogo wpuścić
                 continue;
             }
             int grpSize = t[i].group_size;
 
-            if (freeSpace < grpSize && grpSize != 0) {
+            if (freeSpace < grpSize && grpSize != 0) {  //stolik jest już zajęty przez grupy o konkretnym rozmiarze
                 continue;
             }
-            GroupOfClients* newG = dequeueSuitable(q, grpSize, freeSpace);
-            if (newG) {
+            GroupOfClients* newG = dequeueSuitable(q, grpSize, freeSpace);  //wyszukuje pierwszą pasującą grupę
+            if (newG) { //newG != 0 -> to znaczy, że w kolejce była jakaś grupa, którą możemy posadzić przy itym stoliku
                 seatGroupAtTable(t, i, newG, qid);
                 free(newG);
                 updated = 1;
@@ -114,8 +114,8 @@ static void sendClosingSoon(ClientsQueue* q, int queueId) {
     while (iter) {
         GroupOfClients* g = &iter->data;
         CommunicationMessage msg;
-        msg.mtype      = g->groupPID;
-        msg.group      = *g;
+        msg.mtype = g->groupPID;
+        msg.group = *g;
         msg.tableIndex = NEAR_CLOSING;
 
         printf(CLR_CASHIER "[Kasjer] Informuję grupę PID(%d), że zaraz zamykamy.\n" CLR_RESET,
@@ -130,8 +130,7 @@ static void sendClosingSoon(ClientsQueue* q, int queueId) {
 static void showCurrentTables(DiningTable* arr, int count) {
     printf(CLR_CASHIER "\n--- Stoliki w lokalu ---\n" CLR_RESET);
     for (int i = 0; i < count; i++) {
-        printf(CLR_CASHIER "[Stol %2d] Kap: %d | Zaj: %d | GrupaSz: %d | PIDy: (" CLR_RESET,
-               i, arr[i].capacity, arr[i].total_seated, arr[i].group_size);
+        printf(CLR_CASHIER "[Stol %2d] Kap: %d | Zaj: %d | GrupaSz: %d | PIDy: (" CLR_RESET, i, arr[i].capacity, arr[i].total_seated, arr[i].group_size);
         for (int j = 0; j < 4; j++) {
             if (arr[i].occupant_pids[j] != 0) {
                 printf(CLR_CASHIER " %d " CLR_RESET, (int)arr[i].occupant_pids[j]);
@@ -139,7 +138,7 @@ static void showCurrentTables(DiningTable* arr, int count) {
         }
         printf(CLR_CASHIER ")\n" CLR_RESET);
     }
-    printf(CLR_CASHIER "------------------------\n\n" CLR_RESET);
+    printf(CLR_CASHIER "************************\n\n" CLR_RESET);
 }
 
 // -------------------------------------
@@ -191,8 +190,8 @@ int main(int argc, char* argv[]) {
         perror(CLR_CASHIER "[Kasjer] błąd shmat()" CLR_RESET);
         exit(1);
     }
-    setupTables(allTables, 0,        st1, 1);
-    setupTables(allTables, st1,     st1+st2,     2);
+    setupTables(allTables, 0, st1, 1);
+    setupTables(allTables, st1, st1+st2, 2);
     setupTables(allTables, st1+st2, st1+st2+st3, 3);
     setupTables(allTables, st1+st2+st3, st1+st2+st3+st4, 4);
 
