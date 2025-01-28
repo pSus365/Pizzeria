@@ -78,6 +78,7 @@ int main(int argc, char* argv[]) {
 
     // Losowy czas do pożaru
     int randomDelay = rand() % 35 + 10;
+    //int randomDelay = rand() % 1000 + 80;
     sleep(randomDelay);
 
     printf(CLR_FIREMAN "[Strażak] POŻAR wybucha!\n" CLR_RESET);

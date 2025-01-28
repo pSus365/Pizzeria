@@ -202,7 +202,9 @@ GroupOfClients* dequeueSuitable(ClientsQueue* q, int neededSize, int freeSeats) 
 
     while (curr != NULL) {
         GroupOfClients* gr = &curr->data;
+
         int canEnter = 0;
+
         if (neededSize == 0) {
             // Jeżeli stolik nie ma przypisanego group_size, wpuścimy każdą grupę, jeśli się zmieści
             if (gr->size <= freeSeats) {
@@ -230,10 +232,11 @@ GroupOfClients* dequeueSuitable(ClientsQueue* q, int neededSize, int freeSeats) 
             return ret;
         }
 
+        // Nie pasuje? Przechodzimy do kolejnego węzła
         prev = curr;
         curr = curr->next;
     }
-
+    // Jeśli przejdziemy całą pętlę i nic nie znajdziemy, zwracamy NULL
     return NULL;
 }
 
@@ -261,6 +264,6 @@ void clearQueue(ClientsQueue* q) {
         tmp = tmp->next;
         free(toDelete);
     }
-    q->head        = NULL;
+    q->head = NULL;
     q->currentSize = 0;
 }

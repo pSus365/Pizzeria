@@ -40,9 +40,11 @@
 
 // Rozmiary i czasy (można dostosować do wymagań)
 #define TIME_BEFORE_CLOSE    5
-#define RUNTIME_LIMIT       60
+#define RUNTIME_LIMIT       60  // pizzeria działa 60 sekund lub dopoki strazak nie oglosi pozaru
+//#define RUNTIME_LIMIT       300
 #define MAX_CUSTOMERS      400
 #define QUEUE_LIMIT         30
+
 
 // --------------------- Struktury ---------------------
 

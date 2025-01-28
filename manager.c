@@ -236,7 +236,7 @@ int main(int argc, char* argv[]) {
         break;
     }
 
-    // Jeśli nie było pożaru, a kasjer już nie żyje, to strażak może być niepotrzebny
+    // Jeśli nie było pożaru, a kasjer już nie żyje, to strażak jest już niepotrzebny
     if (!fireEvent && kill(cashierPid, 0) != 0) {
         kill(firemanPid, SIGTERM);
     }

@@ -5,8 +5,8 @@
 #include <sys/types.h>
 
 // Zmienne globalne sterowane sygnałami
-static volatile sig_atomic_t fireSignal    = 0;
-static volatile sig_atomic_t closeIsNear   = 0;
+static volatile sig_atomic_t fireSignal = 0;
+static volatile sig_atomic_t closeIsNear = 0;
 static volatile unsigned long forcedFinish = ULONG_MAX;
 
 /**
@@ -46,8 +46,8 @@ static void setupTables(DiningTable* t, int start, int end, int cap) {
         for (int j = 0; j < 4; j++) {
             t[i].occupant_pids[j] = 0;
         }
-        t[i].capacity     = cap;
-        t[i].group_size   = 0;
+        t[i].capacity = cap;
+        t[i].group_size = 0;
         t[i].total_seated = 0;
     }
 }
@@ -72,8 +72,7 @@ static int findFreeTable(DiningTable* arr, int groupSize, int count) {
         return NEAR_CLOSING;
     }
     for (int i = 0; i < count; i++) {
-        if ((arr[i].group_size == 0 || arr[i].group_size == groupSize) &&
-            (arr[i].capacity - arr[i].total_seated - groupSize >= 0)) {
+        if ((arr[i].group_size == 0 || arr[i].group_size == groupSize) && (arr[i].capacity - arr[i].total_seated - groupSize >= 0)) {
             return i;
         }
     }
